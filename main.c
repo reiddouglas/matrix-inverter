@@ -1,6 +1,6 @@
 #include <arm_neon.h>
 #include <stdlib.h>
-
+#include <stdio.h>
 
 #define ROWS 6
 #define COLS 6

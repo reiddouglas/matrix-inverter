@@ -5,3 +5,4 @@
 - Language: C/C++
 - Wordlength: 16 bits
 - Condition number: < 1024 (2^10)
+- Elements are 11-bit signed integers

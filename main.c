@@ -88,33 +88,45 @@ static inline void shift_matrix_left(int32_t *matrix){
     }
 }
 
-
-static inline void mult_row(int32_t *matrix, int32_t multiplier, int row){
+/**
+ * @brief multiplies a matrix and identity row by a given multiplier
+ * 
+ * @param matrix 
+ * @param multiplier 
+ * @param row 
+ */
+void mult_row(int32_t multiplier, int row){
+    // matrix pointer
     int32_t *mptr = &matrix[row * COLS];
+    int32_t *iptr = &identity[row * COLS];
 
-    // load both halves of the row at once for fast memoryo access! WOOOO, I LOVE MEMORY!
-    int32x4_t half1 = vld1q_s32(mptr);
-    int32x4_t half2 = vld1q_s32(mptr + 4);
+    // load both halves of the row at once for fast memory access
+    int32x4_t mhalf1 = vld1q_s32(mptr);
+    int32x4_t mhalf2 = vld1q_s32(mptr + 4);
+    int32x4_t ihalf1 = vld1q_s32(iptr);
+    int32x4_t ihalf2 = vld1q_s32(iptr + 4);
 
     // multiply and expand to 64-bit to prevent overflow
-    int64x2_t bot_mult1 = vmull_n_s32(vget_low_s32(half1), multiplier);
-    int64x2_t top_mult1 = vmull_n_s32(vget_high_s32(half1), multiplier);
-    int64x2_t bot_mult2 = vmull_n_s32(vget_low_s32(half2), multiplier);
-    int64x2_t top_mult2 = vmull_n_s32(vget_high_s32(half2), multiplier);
+    int64x2_t mbot_mult1 = vmull_n_s32(vget_low_s32(mhalf1), multiplier);
+    int64x2_t ibot_mult1 = vmull_n_s32(vget_low_s32(ihalf1), multiplier);
+    int64x2_t mbot_mult2 = vmull_n_s32(vget_low_s32(mhalf2), multiplier);
+    int64x2_t ibot_mult2 = vmull_n_s32(vget_low_s32(ihalf2), multiplier);
+    int64x2_t mtop_mult1 = vmull_n_s32(vget_high_s32(mhalf1), multiplier);
+    int64x2_t itop_mult1 = vmull_n_s32(vget_high_s32(ihalf1), multiplier);
+    int64x2_t mtop_mult2 = vmull_n_s32(vget_high_s32(mhalf2), multiplier);
+    int64x2_t itop_mult2 = vmull_n_s32(vget_high_s32(ihalf2), multiplier);
 
-    // narrow back to 32-bit with rounding
-    int32x2_t bot1 = vmovn_s64(vrshrq_n_s64(bot_mult1, FRAC));
-    int32x2_t top1 = vmovn_s64(vrshrq_n_s64(top_mult1, FRAC));
-    int32x2_t bot2 = vmovn_s64(vrshrq_n_s64(bot_mult2, FRAC));
-    int32x2_t top2 = vmovn_s64(vrshrq_n_s64(top_mult2, FRAC));
-
-    // recombine vector quarters
-    half1 = vcombine_s32(bot1, top1);
-    half2 = vcombine_s32(bot2, top2);
+    // narrow back to 32-bit with rounding and recombine vector quarters
+    mhalf1 = vcombine_s32(vqrshrn_n_s64(mbot_mult1, FRAC), vqrshrn_n_s64(mtop_mult1, FRAC));
+    mhalf2 = vcombine_s32(vqrshrn_n_s64(mbot_mult2, FRAC), vqrshrn_n_s64(mtop_mult2, FRAC));
+    ihalf1 = vcombine_s32(vqrshrn_n_s64(ibot_mult1, FRAC), vqrshrn_n_s64(itop_mult1, FRAC));
+    ihalf2 = vcombine_s32(vqrshrn_n_s64(ibot_mult2, FRAC), vqrshrn_n_s64(ibot_mult2, FRAC));
 
     // store both halves back
-    vst1q_s32(mptr, half1);
-    vst1q_s32(mptr + 4, half2);
+    vst1q_s32(mptr, mhalf1);
+    vst1q_s32(mptr + 4, mhalf2);
+    vst1q_s32(iptr, ihalf1);
+    vst1q_s32(iptr + 4, ihalf2);
 }
 
 
@@ -125,47 +137,56 @@ static inline void mult_row(int32_t *matrix, int32_t multiplier, int row){
  * @param row1 
  * @param row2 
  */
-void subtract_row(int32_t *matrix, int32_t multiplier, int row1, int row2){
+void subtract_row(int32_t multiplier, int row1, int row2){
     // matrix pointers
     int32_t *mptr1 = &matrix[row1 * COLS];
     int32_t *mptr2 = &matrix[row2 * COLS];
+    int32_t *iptr1 = &identity[row1 * COLS];
+    int32_t *iptr2 = &identity[row2 * COLS];
 
-    // load matrix rows into neon registers (avoid page faults by loading one row after another)
-    int32x4_t half1_bot = vld1q_s32(mptr1);
-    int32x4_t half1_top = vld1q_s32(mptr1 + 4);
-    int32x4_t half2_bot = vld1q_s32(mptr2);
-    int32x4_t half2_top = vld1q_s32(mptr2 + 4);
+    // load halves of row 1
+    int32x4_t mhalf1 = vld1q_s32(mptr1);
+    int32x4_t mhalf1_top = vld1q_s32(mptr1 + 4);
+    int32x4_t ihalf1 = vld1q_s32(iptr1);
+    int32x4_t ihalf1_top = vld1q_s32(iptr1 + 4);
 
-    // multiply and expand the register size to accomodate (2N-1) bit result
-    int64x2_t bot_mult = vmull_n_s32(vget_low_s32(half1_bot), multiplier);
-    int64x2_t top_mult = vmull_n_s32(vget_high_s32(half1_bot), multiplier);
+    // load halves of row 2
+    int32x4_t mhalf2 = vld1q_s32(mptr2);
+    int32x4_t mhalf2_top = vld1q_s32(mptr2 + 4);
+    int32x4_t ihalf2 = vld1q_s32(iptr2);
+    int32x4_t ihalf2_top = vld1q_s32(iptr2 + 4);
 
-    // return to 32 bit format by discarding MSBs
-    int32x2_t bot = vmovn_s64(vrshrq_n_s64(bot_mult, FRAC));
-    int32x2_t top = vmovn_s64(vrshrq_n_s64(top_mult, FRAC));
+    // multiply and expand row 1 halves
+    int64x2_t mbot = vmull_n_s32(vget_low_s32(mhalf1), multiplier);
+    int64x2_t ibot = vmull_n_s32(vget_low_s32(ihalf1), multiplier);
+    int64x2_t mtop = vmull_n_s32(vget_high_s32(mhalf1), multiplier);
+    int64x2_t itop = vmull_n_s32(vget_high_s32(ihalf1), multiplier);
 
-    // recombine vector quarters into halves
-    half1_bot = vcombine_s32(bot, top);
+    // multiply and expand row 2 halves
+    int64x2_t mbot_top = vmull_n_s32(vget_low_s32(mhalf1_top), multiplier);
+    int64x2_t ibot_top = vmull_n_s32(vget_low_s32(ihalf1_top), multiplier);
+    int64x2_t mtop_top = vmull_n_s32(vget_high_s32(mhalf1_top), multiplier);
+    int64x2_t itop_top = vmull_n_s32(vget_high_s32(ihalf1_top), multiplier);
 
-    // perform saturating subtraction & store
-    half2_bot = vqsubq_s32(half2_bot,half1_bot);
-    vst1q_s32(mptr2, half2_bot);
+    // narrow back to 32-bit with rounding and combine vector quarters
+    mhalf1 = vcombine_s32(vqrshrn_n_s64(mbot, FRAC), vqrshrn_n_s64(mtop, FRAC));
+    ihalf1 = vcombine_s32(vqrshrn_n_s64(ibot, FRAC), vqrshrn_n_s64(itop, FRAC));
+    mhalf1_top = vcombine_s32(vqrshrn_n_s64(mbot_top, FRAC), vqrshrn_n_s64(mtop_top, FRAC));
+    ihalf1_top = vcombine_s32(vqrshrn_n_s64(ibot_top, FRAC), vqrshrn_n_s64(itop_top, FRAC));
 
-    // multiply and expand the register size to accomodate (2N-1) bit result
-    bot_mult = vmull_n_s32(vget_low_s32(half1_top), multiplier);
-    top_mult = vmull_n_s32(vget_high_s32(half1_top), multiplier);
+    // perform saturating subtraction
+    mhalf2 = vqsubq_s32(mhalf2, mhalf1);
+    ihalf2 = vqsubq_s32(ihalf2, ihalf1);
+    mhalf2_top = vqsubq_s32(mhalf2_top, mhalf1_top);
+    ihalf2_top = vqsubq_s32(ihalf2_top, ihalf1_top);
 
-    // return to 32 bit format by discarding MSBs
-    bot = vmovn_s64(vrshrq_n_s64(bot_mult, FRAC));
-    top = vmovn_s64(vrshrq_n_s64(top_mult, FRAC));
-
-    // recombine vector quarters into halves
-    half1_top = vcombine_s32(bot, top);
-
-    // perform saturating subtraction & store
-    half2_top = vqsubq_s32(half2_top,half1_top);
-    vst1q_s32(mptr2 + 4, half2_top);
+    // stor halves back
+    vst1q_s32(mptr2, mhalf2);
+    vst1q_s32(iptr2, ihalf2);
+    vst1q_s32(mptr2 + 4, mhalf2_top);
+    vst1q_s32(iptr2 + 4, ihalf2_top);
 }
+
 
 
 /**
@@ -244,16 +265,14 @@ int inverter(){
 
         int32_t reciprocal = von_neumann_reciprocal(best_val);
 
-        mult_row(matrix, reciprocal, col);
-        mult_row(identity, reciprocal, col);
+        mult_row(reciprocal, col);
 
         // zero non-pivot columns
         register int32_t factor;
         for(int row = 0; row < ROWS; row++){
             if(row != col) {
                 factor = matrix[row * COLS + col];
-                subtract_row(matrix, factor, col, row);
-                subtract_row(identity, factor, col, row);
+                subtract_row(factor, col, row);
             } else {
                 // continue
             }
@@ -283,10 +302,6 @@ int main(){
 
     shift_matrix_left(matrix);
     shift_matrix_left(identity);
-    
-    print_matrix(matrix);
-    printf("\n");
-    print_matrix(identity);
 
     clock_t start = clock();
 

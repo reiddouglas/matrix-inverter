@@ -120,7 +120,7 @@ void mult_row(int32_t multiplier, int row){
     mhalf1 = vcombine_s32(vqrshrn_n_s64(mbot_mult1, FRAC), vqrshrn_n_s64(mtop_mult1, FRAC));
     mhalf2 = vcombine_s32(vqrshrn_n_s64(mbot_mult2, FRAC), vqrshrn_n_s64(mtop_mult2, FRAC));
     ihalf1 = vcombine_s32(vqrshrn_n_s64(ibot_mult1, FRAC), vqrshrn_n_s64(itop_mult1, FRAC));
-    ihalf2 = vcombine_s32(vqrshrn_n_s64(ibot_mult2, FRAC), vqrshrn_n_s64(ibot_mult2, FRAC));
+    ihalf2 = vcombine_s32(vqrshrn_n_s64(ibot_mult2, FRAC), vqrshrn_n_s64(itop_mult2, FRAC));
 
     // store both halves back
     vst1q_s32(mptr, mhalf1);

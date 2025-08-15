@@ -90,43 +90,33 @@ static inline void shift_matrix_left(int32_t *matrix){
 
 
 static inline void mult_row(int32_t *matrix, int32_t multiplier, int row){
-    // matrix pointer
     int32_t *mptr = &matrix[row * COLS];
 
-    // load first 4 rows into neon registers
-    int32x4_t half = vld1q_s32(mptr);
+    // load both halves of the row at once for fast memoryo access! WOOOO, I LOVE MEMORY!
+    int32x4_t half1 = vld1q_s32(mptr);
+    int32x4_t half2 = vld1q_s32(mptr + 4);
 
-    // multiply and expand the register size to accomodate (2N-1) bit result
-    int64x2_t bot_mult = vmull_n_s32(vget_low_s32(half), multiplier);
-    int64x2_t top_mult = vmull_n_s32(vget_high_s32(half), multiplier);
+    // multiply and expand to 64-bit to prevent overflow
+    int64x2_t bot_mult1 = vmull_n_s32(vget_low_s32(half1), multiplier);
+    int64x2_t top_mult1 = vmull_n_s32(vget_high_s32(half1), multiplier);
+    int64x2_t bot_mult2 = vmull_n_s32(vget_low_s32(half2), multiplier);
+    int64x2_t top_mult2 = vmull_n_s32(vget_high_s32(half2), multiplier);
 
-    // return to 32 bit format by discarding MSBs
-    int32x2_t bot = vmovn_s64(vrshrq_n_s64(bot_mult, FRAC));
-    int32x2_t top = vmovn_s64(vrshrq_n_s64(top_mult, FRAC));
+    // narrow back to 32-bit with rounding
+    int32x2_t bot1 = vmovn_s64(vrshrq_n_s64(bot_mult1, FRAC));
+    int32x2_t top1 = vmovn_s64(vrshrq_n_s64(top_mult1, FRAC));
+    int32x2_t bot2 = vmovn_s64(vrshrq_n_s64(bot_mult2, FRAC));
+    int32x2_t top2 = vmovn_s64(vrshrq_n_s64(top_mult2, FRAC));
 
-    // recombine vector quarters into halves
-    half = vcombine_s32(bot, top);
+    // recombine vector quarters
+    half1 = vcombine_s32(bot1, top1);
+    half2 = vcombine_s32(bot2, top2);
 
-    // store vector
-    vst1q_s32(mptr, half);
-
-    // load last 4 rows into neon registers
-    half = vld1q_s32(mptr + 4);
-
-    // multiply and expand the register size to accomodate (2N-1) bit result
-    bot_mult = vmull_n_s32(vget_low_s32(half), multiplier);
-    top_mult = vmull_n_s32(vget_high_s32(half), multiplier);
-
-    // return to 32 bit format by discarding MSBs
-    bot = vmovn_s64(vrshrq_n_s64(bot_mult, FRAC));
-    top = vmovn_s64(vrshrq_n_s64(top_mult, FRAC));
-
-    // recombine vector quarters into halves
-    half = vcombine_s32(bot, top);
-
-    // store vector
-    vst1q_s32(mptr + 4, half);
+    // store both halves back
+    vst1q_s32(mptr, half1);
+    vst1q_s32(mptr + 4, half2);
 }
+
 
 /**
  * @brief Subtracts row1 * multiplier from row2
@@ -209,15 +199,33 @@ static inline void swap_rows(int32_t *matrix, int row1, int row2) {
 static inline int32_t von_neumann_reciprocal(int32_t num){
     // shift numerator by 33 (instead of 22) to increase fractional bits from 11 to 22
     int64_t numerator = (int64_t)1 << 33;
-    int64_t reciprocal = numerator / num;
+    int64_t reciprocal = (numerator + (1LL << (FRAC - 1))) / num;
+    return (int32_t)(reciprocal >> 11);
+}
 
-    if(reciprocal & 0x00000000003FFFFF){
-        reciprocal = (reciprocal >> 11);
-        reciprocal = reciprocal ^ 1;
-    } else {
-        reciprocal = reciprocal >> 11;
+static inline int32_t partial_pivotting(int col){
+    int best_row = col;
+    int32_t best_val = matrix[col + col * COLS];
+    best_val = (best_val == INT32_MIN) ? INT32_MAX : abs(best_val);
+
+    int offset = (ROWS - 1) * COLS + col;
+
+    for (int row = ROWS - 1; row > col; row--, offset -= COLS) {
+        int32_t cur_val = matrix[offset];
+        cur_val = (cur_val == INT32_MIN) ? INT32_MAX : abs(cur_val);
+
+        // branchless max
+        int update = cur_val > best_val;
+        best_val = update ? cur_val : best_val;
+        best_row = update ? row : best_row;
     }
-    return (int32_t)reciprocal;
+
+    if (best_row != col) {
+        swap_rows(matrix, best_row, col);
+        swap_rows(identity, best_row, col);
+    }
+
+    return best_row;
 }
 /*
  For each pivot row
@@ -230,32 +238,10 @@ static inline int32_t von_neumann_reciprocal(int32_t num){
 
 int inverter(){
     for(int col = 0; col < COLS; col++){
-        // partial pivotting
-        register int best_row = col;
-        register int32_t best_val = abs(matrix[best_row * COLS + col]);
-        register int32_t cur_val;
-        for (int row = col + 1; row < ROWS; row++) {
-            cur_val = abs(matrix[row * COLS + col]);
-            if (cur_val > best_val) {
-                best_row = row;
-                best_val = cur_val;
-            }
-        }
-        if(best_val == 0){
-            printf("Ill-conditioned matrix (invertible)\n");
-            exit(1);
-        }
-        else if (best_row != col) {
-            swap_rows(matrix, best_row, col);
-            swap_rows(identity, best_row, col);
-        }
 
-        // set pivot to 1 with reciprocal multiplication
-        /*
-        The largest reciprocal is 2^11 -> fits inside 22 bit integer
-        The smallest reciprocal is 2^-22 -> does not fit inside 11 fractional bits
-        Fixed by Von Neumann rounding scheme
-        */
+        int best_row = partial_pivotting(col);
+        int32_t best_val = matrix[best_row  * COLS + col];
+
         int32_t reciprocal = von_neumann_reciprocal(best_val);
 
         mult_row(matrix, reciprocal, col);

@@ -300,7 +300,6 @@ int main(){
 
     int64_t norm = matrix_norm(matrix);
     if(norm > (1<<10)){
-        printf("Estimated condition number %lld exceeds limit of 2^11", norm);
         exit(0);
     }else {
         // nothing

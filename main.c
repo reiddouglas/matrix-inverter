@@ -293,9 +293,6 @@ void print_matrix(int32_t *matrix) {
 
 int main(){
 
-    shift_matrix_left(matrix);
-    shift_matrix_left(identity);
-
     clock_t start = clock();
 
     int64_t norm = matrix_norm(matrix);
@@ -304,6 +301,9 @@ int main(){
     }else {
         // nothing
     }
+
+    shift_matrix_left(matrix);
+    shift_matrix_left(identity);
 
     inverter(matrix, identity);
 

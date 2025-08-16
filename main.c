@@ -95,7 +95,7 @@ static inline void shift_matrix_left(int32_t * restrict matrix){
  * @param multiplier 
  * @param row 
  */
-void mult_row(int32_t * restrict matrix, int32_t * restrict identity, int32_t multiplier, int row){
+static inline void mult_row(int32_t * restrict matrix, int32_t * restrict identity, int32_t multiplier, int row){
     // matrix pointer
     int32_t *mptr = &matrix[row * COLS];
     int32_t *iptr = &identity[row * COLS];
@@ -137,7 +137,7 @@ void mult_row(int32_t * restrict matrix, int32_t * restrict identity, int32_t mu
  * @param row1 
  * @param row2 
  */
-void subtract_row(int32_t * restrict matrix, int32_t * restrict identity, int32_t multiplier, int row1, int row2){
+static inline void subtract_row(int32_t * restrict matrix, int32_t * restrict identity, int32_t multiplier, int row1, int row2){
     // matrix pointers
     int32_t *mptr1 = &matrix[row1 * COLS];
     int32_t *mptr2 = &matrix[row2 * COLS];
@@ -217,14 +217,14 @@ static inline void swap_rows(int32_t * restrict matrix, int row1, int row2) {
 }
 
 
-int32_t von_neumann_reciprocal(int32_t num){
+static inline int32_t von_neumann_reciprocal(int32_t num){
     // shift numerator by 33 (instead of 22) to increase fractional bits from 11 to 22
     int64_t numerator = (int64_t)1 << 33;
     int64_t reciprocal = (numerator + (1LL << (FRAC - 1))) / num;
     return (int32_t)(reciprocal >> 11);
 }
 
-void partial_pivotting(int32_t * restrict matrix, int32_t * restrict identity, int col){
+static inline void partial_pivotting(int32_t * restrict matrix, int32_t * restrict identity, int col){
     int best_row = col;
     int32_t best_val = matrix[col * COLS + col];
     best_val = (best_val == INT32_MIN) ? INT32_MAX : abs(best_val);
@@ -253,9 +253,7 @@ void partial_pivotting(int32_t * restrict matrix, int32_t * restrict identity, i
     Normalize pivot row by dividing to make pivot = 1
     For every other row in the column, eliminate A[j][i] by subtracting A[j][i] x pivot row from row j.
 */
-
-
-int inverter(int32_t * restrict matrix, int32_t *restrict identity){
+static inline int inverter(int32_t * restrict matrix, int32_t *restrict identity){
     for(int col = 0; col < COLS; col++){
 
         partial_pivotting(matrix, identity, col);

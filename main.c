@@ -293,6 +293,11 @@ void print_matrix(int32_t *matrix) {
 
 int main(){
 
+    shift_matrix_left(matrix);
+    shift_matrix_left(identity);
+
+    clock_t start = clock();
+
     int64_t norm = matrix_norm(matrix);
     if(norm > (1<<10)){
         printf("Estimated condition number %lld exceeds limit of 2^11", norm);
@@ -301,10 +306,11 @@ int main(){
         // nothing
     }
 
-    shift_matrix_left(matrix);
-    shift_matrix_left(identity);
-
     inverter(matrix, identity);
+
+    clock_t stop = clock();
+
+    double elapsed = (double)(stop-start) * 1000.0 / CLOCKS_PER_SEC;
 
     /*
     print_matrix(matrix);

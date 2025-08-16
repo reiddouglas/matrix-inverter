@@ -309,7 +309,8 @@ int main(){
 
     clock_t stop = clock();
 
-    double elapsed = (double)(stop-start) * 1000.0 / CLOCKS_PER_SEC;
+    float elapsed = (float)(stop-start) * 1000.0 / CLOCKS_PER_SEC;
+    printf("Time elapse in ms: %f", elapsed);
 
     /*
     print_matrix(matrix);

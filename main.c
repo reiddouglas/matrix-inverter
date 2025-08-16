@@ -12,7 +12,7 @@
 #define INT 21
 
 // matrix holds 11-bit integers
-int32_t matrix[ROWS * COLS] __attribute__((aligned(16)))= {
+static int32_t matrix[ROWS * COLS] __attribute__((aligned(16)))= {
     10,  2,  3,  4,  5,  6,  7,  8,
     1, 11,  2,  3,  4,  5,  6,  7,
     1,  1, 12,  2,  3,  4,  5,  6,
@@ -24,7 +24,7 @@ int32_t matrix[ROWS * COLS] __attribute__((aligned(16)))= {
 };
 
 // identity matrix that will become our answer
-int32_t identity[ROWS * COLS] __attribute__((aligned(16))) = {
+static int32_t identity[ROWS * COLS] __attribute__((aligned(16))) = {
     1,0,0,0,0,0,0,0,
     0,1,0,0,0,0,0,0,
     0,0,1,0,0,0,0,0,
@@ -304,18 +304,13 @@ int main(){
     shift_matrix_left(matrix);
     shift_matrix_left(identity);
 
-    clock_t start = clock();
-
     inverter(matrix, identity);
 
-    clock_t end = clock();
-
-    double time_spent = (double)(end - start) / CLOCKS_PER_SEC;
-    printf("Elapsed time: %f seconds\n", time_spent);
-
+    /*
     print_matrix(matrix);
     printf("\n");
     print_matrix(identity);
+    */
 
     exit(0);
 }

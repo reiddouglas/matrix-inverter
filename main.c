@@ -40,7 +40,7 @@ int32_t identity[ROWS * COLS] __attribute__((aligned(16))) = {
  * 
  * @return int64_t 
  */
-static inline int64_t matrix_norm(int32_t *matrix){
+static inline int64_t matrix_norm(int32_t * restrict matrix){
     register int64_t max = 0;
     register int64_t sum;
     for(int row = 0; row < ROWS; row++){
@@ -73,7 +73,7 @@ static inline int64_t matrix_norm(int32_t *matrix){
     return max;
 }
 
-static inline void shift_matrix_left(int32_t *matrix){
+static inline void shift_matrix_left(int32_t * restrict matrix){
     for(int row = 0; row < ROWS; row++){
         // matrix row pointer
         int32_t *mptr = &matrix[row * COLS];
@@ -95,7 +95,7 @@ static inline void shift_matrix_left(int32_t *matrix){
  * @param multiplier 
  * @param row 
  */
-void mult_row(int32_t multiplier, int row){
+void mult_row(int32_t * restrict matrix, int32_t * restrict identity, int32_t multiplier, int row){
     // matrix pointer
     int32_t *mptr = &matrix[row * COLS];
     int32_t *iptr = &identity[row * COLS];
@@ -137,7 +137,7 @@ void mult_row(int32_t multiplier, int row){
  * @param row1 
  * @param row2 
  */
-void subtract_row(int32_t multiplier, int row1, int row2){
+void subtract_row(int32_t * restrict matrix, int32_t * restrict identity, int32_t multiplier, int row1, int row2){
     // matrix pointers
     int32_t *mptr1 = &matrix[row1 * COLS];
     int32_t *mptr2 = &matrix[row2 * COLS];
@@ -195,7 +195,7 @@ void subtract_row(int32_t multiplier, int row1, int row2){
  * @param row1 
  * @param row2 
  */
-static inline void swap_rows(int32_t *matrix, int row1, int row2) {
+static inline void swap_rows(int32_t * restrict matrix, int row1, int row2) {
 
     // matrix row pointers
     int32_t *mptr1 = &matrix[row1 * COLS];
@@ -217,16 +217,16 @@ static inline void swap_rows(int32_t *matrix, int row1, int row2) {
 }
 
 
-static inline int32_t von_neumann_reciprocal(int32_t num){
+int32_t von_neumann_reciprocal(int32_t num){
     // shift numerator by 33 (instead of 22) to increase fractional bits from 11 to 22
     int64_t numerator = (int64_t)1 << 33;
     int64_t reciprocal = (numerator + (1LL << (FRAC - 1))) / num;
     return (int32_t)(reciprocal >> 11);
 }
 
-static inline int32_t partial_pivotting(int col){
+void partial_pivotting(int32_t * restrict matrix, int32_t * restrict identity, int col){
     int best_row = col;
-    int32_t best_val = matrix[col + col * COLS];
+    int32_t best_val = matrix[col * COLS + col];
     best_val = (best_val == INT32_MIN) ? INT32_MAX : abs(best_val);
 
     int offset = (ROWS - 1) * COLS + col;
@@ -245,8 +245,6 @@ static inline int32_t partial_pivotting(int col){
         swap_rows(matrix, best_row, col);
         swap_rows(identity, best_row, col);
     }
-
-    return best_row;
 }
 /*
  For each pivot row
@@ -257,22 +255,27 @@ static inline int32_t partial_pivotting(int col){
 */
 
 
-int inverter(){
+int inverter(int32_t * restrict matrix, int32_t *restrict identity){
     for(int col = 0; col < COLS; col++){
 
-        int best_row = partial_pivotting(col);
-        int32_t best_val = matrix[best_row  * COLS + col];
+        partial_pivotting(matrix, identity, col);
+        int32_t pivot = matrix[col  * COLS + col];
 
-        int32_t reciprocal = von_neumann_reciprocal(best_val);
+        if(pivot == 0){
+            printf("Matrix is ill-conditioned (det 0) - Exiting\n");
+            exit(0);
+        }
 
-        mult_row(reciprocal, col);
+        register int32_t reciprocal = von_neumann_reciprocal(pivot);
+
+        mult_row(matrix, identity, reciprocal, col);
 
         // zero non-pivot columns
         register int32_t factor;
         for(int row = 0; row < ROWS; row++){
             if(row != col) {
                 factor = matrix[row * COLS + col];
-                subtract_row(factor, col, row);
+                subtract_row(matrix, identity, factor, col, row);
             } else {
                 // continue
             }
@@ -305,7 +308,7 @@ int main(){
 
     clock_t start = clock();
 
-    inverter();
+    inverter(matrix, identity);
 
     clock_t end = clock();
 

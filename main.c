@@ -23,6 +23,18 @@ static int32_t matrix[ROWS * COLS] __attribute__((aligned(16)))= {
     1,  1,  1,  1,  1,  1,  1, 17
 };
 
+// matrix holds 11-bit integers
+static int32_t matrix2[ROWS * COLS] __attribute__((aligned(16)))= {
+    8,  2,  1,  3,  1,  -2,  0,  1,
+    -17,  7,  20,  2,  1,  1, -111,  0,
+    -21,  1,  6,  1,  1,  0,  8,  1,
+    30,  2,  1,  -7,  0,  -1,  1,  1,
+    1,  1,  21,  0,  5,  7,  0,  1,
+    2,  1,  30,  1,  1,  6,  1,  1,
+    0,  1,  1,  1,  2,  1,  5,  0,
+    1,  0,  1,  1,  1,  -2,  0,  300
+};
+
 // identity matrix that will become our answer
 static int32_t identity[ROWS * COLS] __attribute__((aligned(16))) = {
     1,0,0,0,0,0,0,0,
